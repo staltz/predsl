@@ -46,6 +46,17 @@ test('predsl Record update', async (t) => {
   t.equals(ssb.predsl._getOldest(), 2, 'oldest=2')
 })
 
+test('predsl Record squeeze', async t => {
+  t.ok(await p(ssb.predsl.update)({age: 21}), 'update .age') // msg seq 4
+  t.ok(await p(ssb.predsl.update)({age: 22}), 'update .age') // msg seq 5
+  t.ok(await p(ssb.predsl.update)({age: 23}), 'update .age') // msg seq 6
+
+  t.equals(ssb.predsl._getOldest(), 3, 'oldest=3')
+
+  t.equals(ssb.predsl._squeezePotential(), 2, 'squeezePotential=2')
+  t.ok(await p(ssb.predsl.squeeze)(), 'squeezed')
+})
+
 test('teardown', (t) => {
   ssb.close(t.end)
 })

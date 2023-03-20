@@ -1,7 +1,9 @@
+const p = require('util').promisify
+
 function init(ssb, config) {
   let oldestSeq = 1
   let latestSeq = 0
-  let seqWhenUpdated = new Map()
+  let seqWhenUpdated = new Map() // field name => sequence
 
   const loadPromise = new Promise((resolve, reject) => {
     const iterator = ssb.db.filterAsIterator(
@@ -10,13 +12,15 @@ function init(ssb, config) {
     for (const msg of iterator) {
       if (!msg) continue
       if (!msg.value.content) continue
-      if (msg.value.content.oldest) {
-        oldestSeq = Math.max(oldestSeq, msg.value.content.oldest)
+      if (typeof msg.value.content !== 'object') continue
+      const { sequence, content } = msg.value
+      if (content.oldest) {
+        oldestSeq = Math.max(oldestSeq, content.oldest)
       }
-      latestSeq = Math.max(latestSeq, msg.value.sequence)
-      if (msg.value.content.update) {
-        for (const key in msg.value.content.update) {
-          seqWhenUpdated.set(key, msg.value.sequence)
+      latestSeq = Math.max(latestSeq, sequence)
+      if (content.update) {
+        for (const field in content.update) {
+          seqWhenUpdated.set(field, sequence)
         }
       }
     }
@@ -40,55 +44,94 @@ function init(ssb, config) {
     cb(null, record)
   }
 
+  function forceUpdate(changes, cb) {
+    const prevEntries = [...seqWhenUpdated.entries()]
+    for (const field in changes) {
+      seqWhenUpdated.set(field, latestSeq + 1)
+    }
+    const newOldestSeq = Math.min(...seqWhenUpdated.values())
+
+    ssb.db.create(
+      {
+        feedFormat: 'classic',
+        content: {
+          type: 'TODO',
+          structure: 'record',
+          oldest: newOldestSeq,
+          update: changes,
+        },
+      },
+      (err, msg) => {
+        if (err) {
+          seqWhenUpdated = new Map(prevEntries) // undo
+          return cb(err)
+        }
+        latestSeq = msg.value.sequence
+        oldestSeq = newOldestSeq
+        cb(null, true)
+      }
+    )
+  }
+
   function update(changes, cb) {
     get((err, record) => {
       if (err) return cb(err)
       let hasChanges = false
-      for (const [key, value] of Object.entries(changes)) {
-        if (value !== record[key]) {
+      for (const [field, value] of Object.entries(changes)) {
+        if (value !== record[field]) {
           hasChanges = true
           break
         }
       }
       if (!hasChanges) return cb(null, false)
 
-      const prevEntries = [...seqWhenUpdated.entries()]
-      for (const key in changes) {
-        seqWhenUpdated.set(key, latestSeq + 1)
-      }
-      const newOldestSeq = Math.min(...seqWhenUpdated.values())
-
-      ssb.db.create(
-        {
-          feedFormat: 'classic',
-          content: {
-            type: 'TODO',
-            structure: 'record',
-            oldest: newOldestSeq,
-            update: changes,
-          },
-        },
-        (err, msg) => {
-          if (err) {
-            seqWhenUpdated = new Map(prevEntries) // undo
-            return cb(err)
-          }
-          latestSeq = msg.value.sequence
-          oldestSeq = newOldestSeq
-          cb(null, true)
-        }
-      )
+      forceUpdate(changes, cb)
     })
+  }
+
+  function _squeezePotential() {
+    const numSlots = latestSeq - oldestSeq + 1
+    const occupiedSlots = seqWhenUpdated.size
+    return numSlots - occupiedSlots
+  }
+
+  async function squeeze(cb) {
+    const seqs = [...seqWhenUpdated.values(), latestSeq].sort((a, b) => a - b)
+    const gaps = seqs.map((seq, i) => seq - (i === 0 ? oldestSeq : seqs[i - 1]))
+    const largestGap = Math.max(...gaps)
+    if (largestGap <= 1) return cb(null, false)
+
+    const record = await p(get)()
+    const fields = []
+    for (let i = 1; i < seqs.length; i++) {
+      const prevSeq = seqs[i - 1]
+      const gapWithPrev = gaps[i]
+      if (gapWithPrev >= 2) {
+        const name = [...seqWhenUpdated.entries()].find(
+          ([, v]) => v === prevSeq
+        )[0]
+        fields.push(name)
+      }
+    }
+    if (fields.length === 0) return cb(null, false)
+    const changes = fields.reduce((acc, field) => {
+      acc[field] = record[field]
+      return acc
+    }, {})
+    await p(forceUpdate)(changes)
+    cb(null, true)
   }
 
   return {
     // Public API
     loaded,
-    update,
     get,
+    update,
+    squeeze,
 
     // Internal API, exposed for testing
     _getOldest: () => oldestSeq,
+    _squeezePotential,
   }
 }
 
