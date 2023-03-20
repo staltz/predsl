@@ -1,0 +1,1 @@
+Proof of concept implementing ideas in the thesis "Memory-Bounded Replication of Mutable Data Structures over Immutable Append-Only Logs" by Sebastian Lukas Philipp with SSB JavaScript modules, especially ssb-memdb.
