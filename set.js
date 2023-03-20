@@ -76,7 +76,7 @@ function init(ssb, config) {
       const willBecomeEmpty = seqAdded.size === 1 && seqAdded.has(name)
       seqAdded.delete(name)
       const minSeqOfRemaining = Math.min(...seqAdded.values())
-      const newOldest = willBecomeEmpty
+      const newOldestSeq = willBecomeEmpty
         ? latestSeq + 1
         : seq < minSeqOfRemaining
         ? minSeqOfRemaining
@@ -88,7 +88,7 @@ function init(ssb, config) {
           content: {
             type: 'TODO',
             structure: 'set',
-            oldest: newOldest,
+            oldest: newOldestSeq,
             remove: name,
           },
         },
@@ -98,7 +98,7 @@ function init(ssb, config) {
             return cb(err)
           }
           latestSeq = msg.value.sequence
-          oldestSeq = newOldest
+          oldestSeq = newOldestSeq
           cb(null, true)
         }
       )
