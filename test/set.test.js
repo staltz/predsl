@@ -81,6 +81,7 @@ test('predsl Set squeeze', async (t) => {
   t.ok(await p(ssb.predsl.del)('dave'), 'del') // msg seq 11
   t.equals(ssb.predsl._getOldest(), 7, 'oldest=7')
 
+  t.equals(ssb.predsl._squeezePotential(), 4, 'squeezePotential=4')
   t.ok(await p(ssb.predsl.squeeze)(), 'squeezed, re-adding carol') // msg seq 12
   t.equals(ssb.predsl._getOldest(), 12, 'oldest=12')
 })

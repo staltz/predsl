@@ -3,7 +3,7 @@ const p = require('util').promisify
 function init(ssb, config) {
   let oldestSeq = 1
   let latestSeq = 0
-  const seqAdded = new Map()
+  const seqAdded = new Map() // item name => sequence
 
   const loadPromise = new Promise((resolve, reject) => {
     const iterator = ssb.db.filterAsIterator(
@@ -161,6 +161,12 @@ function init(ssb, config) {
     return set.values()
   }
 
+  function _squeezePotential() {
+    const numSlots = latestSeq - oldestSeq + 1
+    const occupiedSlots = seqAdded.size
+    return numSlots - occupiedSlots
+  }
+
   async function squeeze(cb) {
     const seqs = [...seqAdded.values(), latestSeq].sort((a, b) => a - b)
     const gaps = seqs.map((seq, i) => seq - (i === 0 ? oldestSeq : seqs[i - 1]))
@@ -189,6 +195,7 @@ function init(ssb, config) {
 
     // Internal API, exposed for testing
     _getOldest: () => oldestSeq,
+    _squeezePotential,
   }
 }
 
