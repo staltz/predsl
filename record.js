@@ -98,8 +98,7 @@ function init(ssb, config) {
   async function squeeze(cb) {
     const seqs = [...seqWhenUpdated.values(), latestSeq].sort((a, b) => a - b)
     const gaps = seqs.map((seq, i) => seq - (i === 0 ? oldestSeq : seqs[i - 1]))
-    const largestGap = Math.max(...gaps)
-    if (largestGap <= 1) return cb(null, false)
+    if (_squeezePotential() < 1) return cb(null, false)
 
     const record = await p(get)()
     const fields = []

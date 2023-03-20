@@ -170,8 +170,7 @@ function init(ssb, config) {
   async function squeeze(cb) {
     const seqs = [...seqAdded.values(), latestSeq].sort((a, b) => a - b)
     const gaps = seqs.map((seq, i) => seq - (i === 0 ? oldestSeq : seqs[i - 1]))
-    const largestGap = Math.max(...gaps)
-    if (largestGap <= 1) return cb(null, false)
+    if (_squeezePotential() < 1) return cb(null, false)
 
     for (let i = 1; i < seqs.length; i++) {
       const prevSeq = seqs[i - 1]
