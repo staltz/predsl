@@ -45,6 +45,7 @@ function init(ssb, config) {
     has(name, (err, exists) => {
       if (err) return cb(err)
       if (exists) return cb(null, false)
+
       const newOldestSeq = seqAdded.size === 0 ? latestSeq + 1 : oldestSeq
 
       ssb.db.create(
@@ -72,6 +73,7 @@ function init(ssb, config) {
     has(name, (err, exists) => {
       if (err) return cb(err)
       if (!exists) return cb(null, false)
+
       const seq = seqAdded.get(name)
       const willBecomeEmpty = seqAdded.size === 1 && seqAdded.has(name)
       seqAdded.delete(name)
