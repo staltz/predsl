@@ -71,9 +71,18 @@ test('predsl Set delete mid does not change oldest', async (t) => {
   t.equals(ssb.predsl._getOldest(), 5, 'oldest=5')
 })
 
-test('predsl Sed delete oldest does change oldest', async (t) => {
-  t.ok(await p(ssb.predsl.del)('alice'), 'del alice') // msg seq 7
+test('predsl Set delete oldest does change oldest', async (t) => {
+  t.ok(await p(ssb.predsl.del)('alice'), 'del alice') // msg seq 9
   t.equals(ssb.predsl._getOldest(), 7, 'oldest=7')
+})
+
+test('predsl Set squeeze', async (t) => {
+  t.ok(await p(ssb.predsl.add)('dave'), 'add') // msg seq 10
+  t.ok(await p(ssb.predsl.del)('dave'), 'del') // msg seq 11
+  t.equals(ssb.predsl._getOldest(), 7, 'oldest=7')
+
+  t.ok(await p(ssb.predsl.squeeze)(), 'squeezed, re-adding carol') // msg seq 12
+  t.equals(ssb.predsl._getOldest(), 12, 'oldest=12')
 })
 
 test('teardown', (t) => {

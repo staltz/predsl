@@ -1,3 +1,5 @@
+const p = require('util').promisify
+
 function init(ssb, config) {
   let oldestSeq = 1
   let latestSeq = 0
@@ -69,20 +71,59 @@ function init(ssb, config) {
     })
   }
 
+  function readd(name, cb) {
+    has(name, (err, exists) => {
+      if (err) return cb(err)
+      if (!exists) return cb(null, false)
+
+      const seq = seqAdded.get(name)
+      seqAdded.delete(name)
+      const minSeqOfRemaining = Math.min(...seqAdded.values())
+      const newOldestSeq =
+        seqAdded.size === 0
+          ? latestSeq + 1
+          : seq < minSeqOfRemaining
+          ? minSeqOfRemaining
+          : oldestSeq
+
+      ssb.db.create(
+        {
+          feedFormat: 'classic',
+          content: {
+            type: 'TODO',
+            structure: 'set',
+            oldest: newOldestSeq,
+            add: name,
+          },
+        },
+        (err, msg) => {
+          if (err) {
+            seqAdded.set(name, seq) // undo
+            return cb(err)
+          }
+          seqAdded.set(name, msg.value.sequence)
+          latestSeq = msg.value.sequence
+          oldestSeq = newOldestSeq
+          cb(null, true)
+        }
+      )
+    })
+  }
+
   function del(name, cb) {
     has(name, (err, exists) => {
       if (err) return cb(err)
       if (!exists) return cb(null, false)
 
       const seq = seqAdded.get(name)
-      const willBecomeEmpty = seqAdded.size === 1 && seqAdded.has(name)
       seqAdded.delete(name)
       const minSeqOfRemaining = Math.min(...seqAdded.values())
-      const newOldestSeq = willBecomeEmpty
-        ? latestSeq + 1
-        : seq < minSeqOfRemaining
-        ? minSeqOfRemaining
-        : oldestSeq
+      const newOldestSeq =
+        seqAdded.size === 0
+          ? latestSeq + 1
+          : seq < minSeqOfRemaining
+          ? minSeqOfRemaining
+          : oldestSeq
 
       ssb.db.create(
         {
@@ -120,6 +161,23 @@ function init(ssb, config) {
     return set.values()
   }
 
+  async function squeeze(cb) {
+    const seqs = [...seqAdded.values(), latestSeq].sort((a, b) => a - b)
+    const gaps = seqs.map((seq, i) => seq - (i === 0 ? oldestSeq : seqs[i - 1]))
+    const largestGap = Math.max(...gaps)
+    if (largestGap <= 1) return cb(null, false)
+
+    for (let i = 1; i < seqs.length; i++) {
+      const prevSeq = seqs[i - 1]
+      const gapWithPrev = gaps[i]
+      if (gapWithPrev >= 2) {
+        const name = [...seqAdded.entries()].find(([, v]) => v === prevSeq)[0]
+        await p(readd)(name)
+      }
+    }
+    cb(null, true)
+  }
+
   return {
     // Public API
     loaded,
@@ -127,6 +185,7 @@ function init(ssb, config) {
     has,
     del,
     values,
+    squeeze,
 
     // Internal API, exposed for testing
     _getOldest: () => oldestSeq,
