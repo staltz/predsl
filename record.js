@@ -100,7 +100,6 @@ function init(ssb, config) {
     const gaps = seqs.map((seq, i) => seq - (i === 0 ? oldestSeq : seqs[i - 1]))
     if (_squeezePotential() < 1) return cb(null, false)
 
-    const record = await p(get)()
     const fields = []
     for (let i = 1; i < seqs.length; i++) {
       const prevSeq = seqs[i - 1]
@@ -113,6 +112,7 @@ function init(ssb, config) {
       }
     }
     if (fields.length === 0) return cb(null, false)
+    const record = await p(get)()
     const changes = fields.reduce((acc, field) => {
       acc[field] = record[field]
       return acc
